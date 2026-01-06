@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="LoteVivo LV">
+  <defs>
+    <linearGradient id="lv" x1="120" y1="96" x2="392" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"></stop>
+      <stop offset="1" stop-color="#22C55E"></stop>
+    </linearGradient>
+  </defs>
+
+  <!-- Monograma LV integrado – traço único -->
+  <path d="M164 116
+       V320
+       Q164 384 232 384
+       H286
+       Q322 384 340 350
+       L412 180" fill="none" stroke="url(#lv)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
