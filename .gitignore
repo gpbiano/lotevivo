@@ -1,0 +1,14 @@
+# dependências
+node_modules/
+
+# variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# build
+.next
+dist
+
+# sistema
+.DS_Store
