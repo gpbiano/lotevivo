@@ -1,5 +1,9 @@
-import { FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { animalsService } from "@/modules/animals/service";
+
+type BatchItemInput = { animalId: string; weightKg: number };
+
+type BatchError = { animal_id: string; message: string };
 
 export function weighingsService(app: FastifyInstance) {
   const animals = animalsService(app);
@@ -7,14 +11,14 @@ export function weighingsService(app: FastifyInstance) {
   async function createBatch(params: {
     tenantId: string;
     weighedAt: string;
-    items: Array<{ animalId: string; weightKg: number }>;
+    items: BatchItemInput[];
     notes?: string | null;
     createdBy?: string | null;
   }) {
     const { tenantId, weighedAt, items, notes, createdBy } = params;
 
     const results: any[] = [];
-    const errors: Array<{ animal_id: string; message: string }> = [];
+    const errors: BatchError[] = [];
 
     for (const it of items) {
       try {
@@ -26,7 +30,9 @@ export function weighingsService(app: FastifyInstance) {
           notes,
           createdBy,
         });
-        results.push(created);
+
+        // ✅ pega só o item (pesagem) para retornar limpo no batch
+        results.push(created.item);
       } catch (e: any) {
         errors.push({ animal_id: it.animalId, message: e?.message ?? "Erro" });
       }
@@ -34,6 +40,7 @@ export function weighingsService(app: FastifyInstance) {
 
     return {
       created: results.length,
+      failed: errors.length,
       errors,
       items: results,
     };

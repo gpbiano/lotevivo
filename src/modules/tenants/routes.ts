@@ -1,23 +1,100 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { TenantsService } from "./service";
+import { tenantsService } from "./service";
+import { requireSuperAdmin } from "../../shared/requireSuperAdmin";
 
 export async function tenantsRoutes(app: FastifyInstance) {
-  const service = new TenantsService();
+  const svc = tenantsService(app);
 
-  app.get("/tenants", async (req) => {
-    const userId = req.auth!.userId;
+  // LISTAR EMPRESAS (SÓ SUPER ADMIN)
+  app.get("/admin/tenants", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
 
-    const [items, activeTenantId] = await Promise.all([
-      service.listForUser(userId),
-      service.getActiveTenantId(userId),
-    ]);
+    const q = (req.query as any) ?? {};
+    const items = await svc.listTenants({ limit: q.limit, search: q.search });
 
-    return { activeTenantId, items };
+    return { items };
   });
 
-  app.post("/tenants/:tenantId/select", async (req) => {
-    const { tenantId } = z.object({ tenantId: z.string().uuid() }).parse(req.params);
-    return service.selectActiveTenant(req.auth!.userId, tenantId);
+  // STATUS (SÓ SUPER ADMIN)
+  app.patch("/admin/tenants/:id/status", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+
+    const paramsSchema = z.object({ id: z.string().uuid() });
+    const bodySchema = z.object({ is_active: z.boolean() });
+
+    const { id } = paramsSchema.parse(req.params);
+    const { is_active } = bodySchema.parse(req.body);
+
+    await svc.setTenantStatus({ tenantId: id, isActive: is_active });
+    return { ok: true };
+  });
+
+  // ==========================
+  // USERS DO TENANT (SÓ SUPER ADMIN)
+  // ==========================
+
+  app.get("/admin/tenants/:id/users", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+
+    const paramsSchema = z.object({ id: z.string().uuid() });
+    const { id } = paramsSchema.parse(req.params);
+
+    const items = await svc.listTenantUsersAdmin(id);
+    return { items };
+  });
+
+  app.post("/admin/tenants/:id/users", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+
+    const paramsSchema = z.object({ id: z.string().uuid() });
+    const bodySchema = z.object({
+      email: z.string().email(),
+      role: z.enum(["ADMIN", "OPERATOR", "CONSULTANT"]),
+    });
+
+    const { id } = paramsSchema.parse(req.params);
+    const body = bodySchema.parse(req.body);
+
+    const res = await svc.addUserToTenantByEmailAdmin({
+      tenantId: id,
+      email: body.email,
+      role: body.role,
+    });
+
+    return reply.code(201).send(res);
+  });
+
+  app.patch("/admin/tenants/:id/users/:userId/role", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+
+    const paramsSchema = z.object({
+      id: z.string().uuid(),
+      userId: z.string().uuid(),
+    });
+
+    const bodySchema = z.object({
+      role: z.enum(["ADMIN", "OPERATOR", "CONSULTANT"]),
+    });
+
+    const { id, userId } = paramsSchema.parse(req.params);
+    const { role } = bodySchema.parse(req.body);
+
+    const res = await svc.updateUserRoleAdmin({ tenantId: id, userId, role });
+    return res;
+  });
+
+  app.delete("/admin/tenants/:id/users/:userId", async (req, reply) => {
+    if (!requireSuperAdmin(req, reply)) return;
+
+    const paramsSchema = z.object({
+      id: z.string().uuid(),
+      userId: z.string().uuid(),
+    });
+
+    const { id, userId } = paramsSchema.parse(req.params);
+
+    const res = await svc.removeUserFromTenantAdmin({ tenantId: id, userId });
+    return res;
   });
 }
