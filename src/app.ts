@@ -21,6 +21,11 @@ import { eggProductionRoutes } from "./modules/egg-production/routes";
 import { incubationsRoutes } from "./modules/incubations/routes";
 import { incubationCyclesRoutes } from "./modules/incubation-cycles/routes";
 
+// ✅ NOVO: Estágios de produção + eventos de estágio do lote
+import { productionStagesRoutes } from "./modules/production-stages/routes";
+import { inventoryRoutes } from "./modules/inventory/routes";
+
+
 export async function buildApp() {
   const app = Fastify({ logger: true });
 
@@ -78,6 +83,11 @@ export async function buildApp() {
   await app.register(eggProductionRoutes);
   await app.register(incubationsRoutes);
   await app.register(incubationCyclesRoutes);
+
+  // ✅ NOVO
+  await app.register(productionStagesRoutes);
+  await app.register(inventoryRoutes);
+
 
   return app;
 }

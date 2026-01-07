@@ -19,12 +19,10 @@ export default function Header() {
       const user = auth.user;
       if (!user) return;
 
-      // fallback: email antes do @
       const fallback =
         (user.email?.split("@")[0] || "Bem-vindo").replace(/\./g, " ");
       let name = fallback;
 
-      // pega tenant ativo do user_profiles
       const { data: up } = await supabase
         .from("user_profiles")
         .select("active_tenant_id")
@@ -55,34 +53,53 @@ export default function Header() {
   }, [displayName]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-lv-border bg-lv-surface/85 backdrop-blur">
-      {/* brilho suave premium */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-[radial-gradient(900px_120px_at_25%_0%,rgba(15,82,50,0.12),transparent)]" />
+    <header className="sticky top-0 z-30">
+      {/* vidro principal */}
+      <div className="relative border-b border-lv-border bg-lv-surface/75 backdrop-blur-xl">
+        {/* brilho suave (top glow) */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-[radial-gradient(900px_140px_at_20%_0%,rgba(15,82,50,0.14),transparent)]" />
 
-      <div className="relative flex items-center gap-3 px-4 py-3 md:px-6 md:py-4">
-        {/* Título */}
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-lv-fg">{greeting}</div>
-          <div className="text-xs text-lv-muted">
-            Visão geral do seu criatório e operações
+        {/* linha de luz dourada sutil */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[rgba(182,139,45,0.35)] to-transparent" />
+
+        <div className="relative flex items-center gap-4 px-4 py-4 md:px-6">
+          {/* Saudação */}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-lv-fg leading-tight">
+              {greeting}
+            </div>
+            <div className="mt-0.5 text-xs text-lv-muted">
+              Visão geral do seu criatório e operações
+            </div>
           </div>
-        </div>
 
-        {/* Busca */}
-        <div className="hidden md:block w-[340px]">
-          <div className="rounded-2xl border border-lv-border bg-white/70 px-3 py-2 shadow-[0_12px_24px_rgba(0,0,0,0.06)]">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar (em breve)"
-              className="w-full bg-transparent outline-none text-sm text-lv-fg placeholder:text-lv-muted"
-            />
+          {/* Busca */}
+          <div className="hidden lg:block w-[360px]">
+            <div className="flex items-center gap-2 rounded-2xl border border-lv-border bg-white/75 px-3 py-2 shadow-[0_12px_28px_rgba(0,0,0,0.08)] backdrop-blur">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4 text-lv-muted"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </svg>
+
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar (em breve)"
+                className="w-full bg-transparent outline-none text-sm text-lv-fg placeholder:text-lv-muted"
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Seletor de empresa (mantém seu componente) */}
-        <div className="min-w-[220px]">
-          <TenantSwitcher />
+          {/* Tenant switcher */}
+          <div className="min-w-[220px]">
+            <TenantSwitcher />
+          </div>
         </div>
       </div>
     </header>

@@ -26,7 +26,10 @@ html, body {
 }
 
 body {
-  background: var(--lv-bg);
+  /* ⚠️ IMPORTANTE:
+     não usar "background:" aqui, porque ele apaga o background-image do layout
+  */
+  background-color: var(--lv-bg);
   color: var(--lv-fg);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }

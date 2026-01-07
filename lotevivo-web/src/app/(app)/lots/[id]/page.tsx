@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiGet } from "@/lib/api";
@@ -20,6 +20,11 @@ type Animal = {
   tag_id?: string | null;
   name?: string | null;
   status: string;
+};
+
+type AnimalsListResponse = {
+  items: Animal[];
+  total?: number;
 };
 
 /* ================= UI ================= */
@@ -55,42 +60,69 @@ function Card({ children }: { children: React.ReactNode }) {
 /* ================= PAGE ================= */
 
 export default function LotDetailsPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
+  const id = useMemo(() => {
+    const raw = (params as any)?.id;
+    return typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : "";
+  }, [params]);
 
   const [lot, setLot] = useState<Lot | null>(null);
   const [animals, setAnimals] = useState<Animal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  async function load(lotId: string) {
+    if (!lotId) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      const res = await apiGet<any>(`/lots/${id}`);
+      // 1) carrega lote
+      const lotRes = (await apiGet(`/lots/${lotId}`)) as Lot;
+      setLot(lotRes);
 
-      setLot(res);
+      // 2) carrega animais do lote (fonte da verdade)
+      // OBS: teu backend filtra por animals.current_lot_id = lotId
+      const animalsRes = (await apiGet(
+        `/animals?lotId=${encodeURIComponent(lotId)}&limit=500`
+      )) as AnimalsListResponse;
 
-      // 🔒 PROTEÇÃO ABSOLUTA
-      if (Array.isArray(res.animals)) {
-        setAnimals(res.animals);
-      } else if (Array.isArray(res.animals?.items)) {
-        setAnimals(res.animals.items);
-      } else {
-        setAnimals([]);
-      }
+      setAnimals(Array.isArray(animalsRes?.items) ? animalsRes.items : []);
     } catch (e: any) {
       setError(e?.message ?? "Erro ao carregar lote");
+      setLot(null);
+      setAnimals([]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load();
+    let alive = true;
+
+    (async () => {
+      if (!id) return;
+      if (!alive) return;
+      await load(id);
+    })();
+
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   /* ================= RENDER ================= */
+
+  if (!id) {
+    return (
+      <div className="rounded-2xl border border-lv-border bg-white/60 p-6">
+        <div className="text-sm font-semibold text-lv-fg">Lote inválido</div>
+        <p className="mt-1 text-sm text-lv-muted">Não foi possível identificar o ID do lote.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div className="text-sm text-lv-muted">Carregando lote...</div>;
@@ -115,7 +147,7 @@ export default function LotDetailsPage() {
         actions={
           <Link
             href="/lots"
-            className="rounded-xl border border-lv-border bg-white/70 px-4 py-2 text-sm"
+            className="rounded-xl border border-lv-border bg-white/70 px-4 py-2 text-sm hover:bg-white transition"
           >
             Voltar
           </Link>
@@ -157,22 +189,17 @@ export default function LotDetailsPage() {
           ) : (
             <div className="divide-y divide-lv-border rounded-2xl border border-lv-border bg-white/60 overflow-hidden">
               {animals.map((a) => (
-                <div
-                  key={a.id}
-                  className="p-4 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="text-sm font-semibold">
+                <div key={a.id} className="p-4 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold truncate">
                       {a.tag_id || a.name || "Sem identificação"}
                     </div>
-                    <div className="text-xs text-lv-muted">
-                      Status: {a.status}
-                    </div>
+                    <div className="text-xs text-lv-muted">Status: {a.status}</div>
                   </div>
 
                   <Link
                     href={`/animals/${a.id}`}
-                    className="text-sm rounded-xl border border-lv-border px-3 py-1.5 hover:bg-white"
+                    className="text-sm rounded-xl border border-lv-border px-3 py-1.5 hover:bg-white transition"
                   >
                     Ver animal
                   </Link>

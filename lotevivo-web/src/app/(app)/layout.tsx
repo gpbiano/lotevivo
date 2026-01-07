@@ -6,6 +6,31 @@ import Sidebar from "@/components/app-shell/Sidebar";
 import Header from "@/components/app-shell/Header";
 import { getToken } from "@/lib/auth";
 
+function AppBackground() {
+  return (
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      {/* base verde (igual login) */}
+      <div className="absolute inset-0 bg-emerald-50/70" />
+
+      {/* waves: contain + bottom (igual login) */}
+      <div
+        className="absolute inset-0 opacity-95"
+        style={{
+          backgroundImage: 'url("/bg-waves.png")',
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "contain",
+          backgroundPosition: "bottom center",
+        }}
+      />
+
+      {/* clareia só a parte de cima (não apaga as ondas) */}
+      <div className="absolute inset-0 bg-gradient-to-b from-white via-white/70 to-transparent" />
+
+      {/* vinheta leve no topo */}
+      <div className="absolute inset-x-0 top-0 h-[55%] bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.25),rgba(255,255,255,0.85)_70%)]" />
+    </div>
+  );
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,10 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center text-lv-fg">
-        <div className="fixed inset-0 -z-10 bg-lv-bg">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(15,82,50,0.14),transparent_45%),radial-gradient(circle_at_82%_14%,rgba(200,164,76,0.16),transparent_45%),radial-gradient(circle_at_55%_85%,rgba(133,172,35,0.12),transparent_48%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.55),rgba(246,241,231,0.95))]" />
-        </div>
+        <AppBackground />
 
         <div className="flex items-center gap-3 rounded-2xl border border-lv-border bg-lv-surface/75 px-5 py-3 shadow-soft backdrop-blur">
           <div className="h-2.5 w-2.5 rounded-full bg-lv-green shadow-[0_0_0_6px_rgba(15,82,50,0.12)]" />
@@ -40,15 +62,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen text-lv-fg">
-      {/* Background */}
-      <div className="fixed inset-0 -z-10 bg-lv-bg">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(15,82,50,0.14),transparent_45%),radial-gradient(circle_at_82%_14%,rgba(200,164,76,0.16),transparent_45%),radial-gradient(circle_at_55%_85%,rgba(133,172,35,0.12),transparent_48%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.55),rgba(246,241,231,0.95))]" />
-        <div className="absolute inset-0 opacity-[0.07] bg-[linear-gradient(to_right,rgba(15,82,50,1)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,82,50,1)_1px,transparent_1px)] bg-[size:44px_44px]" />
-      </div>
+      <AppBackground />
 
       <div className="flex min-h-screen">
         <Sidebar />
+
         <div className="flex-1 min-w-0">
           <Header />
 

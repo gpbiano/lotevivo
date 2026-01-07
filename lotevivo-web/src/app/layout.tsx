@@ -14,10 +14,6 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-/**
- * URL base do site
- * Em produção, defina NEXT_PUBLIC_SITE_URL
- */
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL?.startsWith("http")
     ? process.env.NEXT_PUBLIC_SITE_URL
@@ -30,28 +26,8 @@ export const metadata: Metadata = {
   },
   description: "Gestão inteligente do seu criatório e produção.",
   applicationName: "LoteVivo",
-
   metadataBase: new URL(siteUrl),
-
   manifest: "/site.webmanifest",
-
-  icons: {
-    icon: [
-      // Favicon principal (SVG transparente)
-      { url: "/lv-favicon.svg", type: "image/svg+xml" },
-
-      // Fallbacks
-      { url: "/favicon.ico" },
-      { url: "/icon.png", type: "image/png" },
-    ],
-    apple: [
-      {
-        url: "/apple-icon.png",
-        sizes: "180x180",
-        type: "image/png",
-      },
-    ],
-  },
 };
 
 export const viewport: Viewport = {
@@ -66,7 +42,18 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-white text-zinc-900`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen text-zinc-900`}
+        style={{
+          backgroundImage: `
+            radial-gradient(900px 500px at 15% 20%, rgba(232,248,240,0.95), transparent 60%),
+            radial-gradient(900px 500px at 85% 80%, rgba(232,248,240,0.65), transparent 60%),
+            url("/bg-waves.png")
+          `,
+          backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+          backgroundSize: "cover, cover, cover",
+          backgroundPosition: "top left, bottom right, right center",
+          backgroundAttachment: "fixed",
+        }}
       >
         {children}
       </body>
