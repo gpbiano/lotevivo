@@ -1,36 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { apiGet, apiPost } from "@/lib/api";
 
-type Stage = {
+type Stage = { id: string; name: string };
+type LotEvent = {
   id: string;
-  name: string;
-  code: string;
-  is_terminal?: boolean;
-};
-
-type LotStageEvent = {
-  id: string;
-  lot_id: string;
   from_stage_id: string | null;
   to_stage_id: string;
   event_date: string;
   notes: string | null;
-  meta: Record<string, any>;
-  created_at: string;
 };
 
-function formatDateBR(iso?: string | null) {
-  if (!iso) return "-";
-  // iso pode vir YYYY-MM-DD ou ISO completo
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return String(iso);
-  return d.toLocaleDateString("pt-BR");
-}
-
-function todayIsoDate() {
-  const d = new Date();
+function toISODate(d: Date) {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
@@ -46,187 +29,159 @@ export default function LotDetailsModal({
   lot: any;
   onClose: () => void;
 }) {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [stages, setStages] = useState<Stage[]>([]);
-  const [events, setEvents] = useState<LotStageEvent[]>([]);
+  const [events, setEvents] = useState<LotEvent[]>([]);
 
   const [toStageId, setToStageId] = useState<string>("");
-  const [eventDate, setEventDate] = useState<string>(todayIsoDate());
+  const [eventDate, setEventDate] = useState<string>(toISODate(new Date()));
   const [notes, setNotes] = useState<string>("");
 
-  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  const currentStageId = lot?.stageId ?? lot?.stage_id ?? null;
-  const chain = "aves"; // ✅ por enquanto fixo (produção aves)
+  // --- Portal mount
+  useEffect(() => setMounted(true), []);
 
-  const stageMap = useMemo(() => {
-    const m: Record<string, Stage> = {};
-    for (const s of stages) m[s.id] = s;
-    return m;
-  }, [stages]);
-
-  const currentStageName = currentStageId ? (stageMap[currentStageId]?.name ?? "-") : "-";
-
+  // --- ESC fecha + trava scroll
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    };
+    window.addEventListener("keydown", onKey);
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
 
+  // --- Load
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
     async function load() {
+      setErr(null);
       try {
-        setLoading(true);
-        setError(null);
+        // Ajuste chain/purpose conforme teu backend (aqui está em aves)
+        const stagesRes = (await apiGet(`/production/stages?chain=aves`)) as {
+          items: { id: string; name: string }[];
+        };
 
-        const [st, ev] = await Promise.all([
-          apiGet(`/production/stages?chain=${encodeURIComponent(chain)}`),
-          apiGet(`/lots/${lotId}/stage-events`),
-        ]);
+        const evRes = (await apiGet(`/lots/${lotId}/stage-events`)) as {
+          items: LotEvent[];
+        };
 
-        if (!mounted) return;
+        if (!alive) return;
 
-        const itemsStages: Stage[] = (st?.items ?? []).map((x: any) => ({
-          id: x.id,
-          name: x.name,
-          code: x.code,
-          is_terminal: x.is_terminal ?? x.isTerminal ?? false,
-        }));
+        const stageItems = (stagesRes?.items ?? []).filter(Boolean);
+        setStages(stageItems);
 
-        setStages(itemsStages);
-        setEvents((ev?.items ?? []) as LotStageEvent[]);
+        const evItems = (evRes?.items ?? []).filter(Boolean);
+        setEvents(evItems);
 
-        // default: próximo stage (se tiver), senão primeiro
-        const idx = itemsStages.findIndex((s) => s.id === currentStageId);
-        const next = idx >= 0 ? itemsStages[idx + 1] : itemsStages[0];
-        setToStageId(next?.id ?? "");
+        // sugestão default: estágio atual do lote, senão primeiro estágio
+        const current = lot?.stage_id ?? "";
+        const fallback = stageItems?.[0]?.id ?? "";
+        setToStageId(current || fallback);
       } catch (e: any) {
-        if (!mounted) return;
-        setError(e?.message ?? "Erro ao carregar detalhes do lote.");
-      } finally {
-        if (!mounted) return;
-        setLoading(false);
+        if (!alive) return;
+        setErr(e?.message ?? "Erro ao carregar detalhes do lote");
       }
     }
 
     load();
     return () => {
-      mounted = false;
+      alive = false;
     };
-  }, [lotId, currentStageId]);
+  }, [lotId, lot?.stage_id]);
 
-  async function onMoveStage() {
-    if (!toStageId) {
-      setError("Selecione o estágio de destino.");
-      return;
-    }
+  const stageNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    stages.forEach((s) => m.set(s.id, s.name));
+    return m;
+  }, [stages]);
+
+  async function onMove() {
+    setSaving(true);
+    setErr(null);
 
     try {
-      setSaving(true);
-      setError(null);
-
       await apiPost(`/lots/${lotId}/stage`, {
         toStageId,
         eventDate,
-        notes: notes?.trim() ? notes.trim() : null,
+        notes: notes?.trim() || null,
         meta: {},
       });
 
-      // recarrega eventos
-      const ev = await apiGet(`/lots/${lotId}/stage-events`);
-      setEvents((ev?.items ?? []) as LotStageEvent[]);
+      // Recarrega eventos
+      const evRes = (await apiGet(`/lots/${lotId}/stage-events`)) as {
+        items: LotEvent[];
+      };
+      setEvents((evRes?.items ?? []).filter(Boolean));
 
-      // opcional: feedback rápido
-      setNotes("");
+      // ✅ Se teu Kanban depende do stage_id do lote na lista,
+      // o ideal é o backend retornar o lote atualizado OU o front recarregar o Kanban.
+      // Aqui pelo menos garantimos o histórico atualizado.
     } catch (e: any) {
-      setError(e?.message ?? "Erro ao mover estágio.");
+      setErr(e?.message ?? "Erro ao mover lote de estágio");
     } finally {
       setSaving(false);
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50">
-      {/* backdrop */}
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999]">
+      {/* overlay */}
       <button
         type="button"
         aria-label="Fechar"
         onClick={onClose}
-        className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
       />
 
       {/* modal */}
-      <div className="absolute inset-0 flex items-center justify-center p-3 md:p-6">
-        <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-lv-border bg-white/90 shadow-[0_30px_120px_rgba(0,0,0,0.22)] backdrop-blur">
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl rounded-3xl border border-lv-border bg-white/90 shadow-[0_30px_120px_rgba(0,0,0,0.25)] backdrop-blur">
           {/* header */}
-          <div className="p-5 md:p-6 border-b border-lv-border bg-white/70">
-            <div className="flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-lv-fg truncate">
-                  {lot?.name ?? "Lote"}
-                </div>
-                <div className="mt-1 text-xs text-lv-muted">
-                  Estágio atual:{" "}
-                  <span className="text-lv-fg/80 font-medium">{currentStageName}</span>
-                  {lot?.qty != null ? (
-                    <>
-                      {" "}
-                      • Quantidade:{" "}
-                      <span className="text-lv-fg/80 font-medium">{lot.qty}</span>
-                    </>
-                  ) : null}
-                </div>
+          <div className="flex items-start justify-between gap-3 border-b border-lv-border p-5">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-lv-fg truncate">
+                {lot?.name ?? "Lote"}
               </div>
-
-              <button
-                onClick={onClose}
-                className="rounded-xl border border-lv-border bg-white px-3 py-1.5 text-xs text-lv-fg/80 hover:bg-white/80 transition"
-              >
-                Fechar
-              </button>
+              <div className="text-xs text-lv-muted">
+                Quantidade: <span className="text-lv-fg">{lot?.quantity ?? lot?.qty ?? "—"}</span>
+              </div>
             </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-lv-border bg-white/70 px-3 py-1.5 text-sm hover:bg-white"
+            >
+              Fechar
+            </button>
           </div>
 
-          {/* body */}
-          <div className="p-5 md:p-6 space-y-5">
-            {loading ? (
-              <div className="rounded-2xl border border-lv-border bg-lv-surface/70 p-4 text-sm text-lv-muted">
-                Carregando detalhes...
-              </div>
-            ) : null}
+          <div className="p-5 space-y-5">
+            {/* mover */}
+            <div className="rounded-2xl border border-lv-border bg-white/70 p-4">
+              <div className="text-sm font-semibold text-lv-fg">Mover de estágio</div>
 
-            {error ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            ) : null}
-
-            {/* mover estágio */}
-            <div className="rounded-3xl border border-lv-border bg-lv-surface/70 p-4 md:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-lv-fg">Mover estágio</div>
-                  <div className="text-xs text-lv-muted">
-                    Registre a mudança de estágio deste lote.
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-1">
-                  <label className="text-xs font-medium text-lv-muted">Destino</label>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-[1fr_180px_170px] gap-3">
+                <div className="space-y-1">
+                  <div className="text-xs text-lv-muted">Destino</div>
                   <select
                     value={toStageId}
                     onChange={(e) => setToStageId(e.target.value)}
-                    className="mt-1 w-full rounded-2xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-300"
+                    className="w-full rounded-xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100"
                   >
-                    <option value="">Selecione…</option>
                     {stages.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -235,99 +190,85 @@ export default function LotDetailsModal({
                   </select>
                 </div>
 
-                <div className="md:col-span-1">
-                  <label className="text-xs font-medium text-lv-muted">Data do evento</label>
+                <div className="space-y-1">
+                  <div className="text-xs text-lv-muted">Data do evento</div>
                   <input
                     type="date"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
-                    className="mt-1 w-full rounded-2xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-300"
+                    className="w-full rounded-xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100"
                   />
                 </div>
 
-                <div className="md:col-span-1 flex items-end">
+                <div className="flex items-end">
                   <button
                     type="button"
-                    disabled={saving}
-                    onClick={onMoveStage}
-                    className="w-full rounded-2xl bg-lv-green px-4 py-2.5 text-sm font-semibold text-white hover:bg-lv-green/90 disabled:opacity-60 transition"
+                    onClick={onMove}
+                    disabled={saving || !toStageId}
+                    className="w-full rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                   >
-                    {saving ? "Salvando..." : "Mover"}
+                    {saving ? "Movendo..." : "Mover"}
                   </button>
                 </div>
+              </div>
 
-                <div className="md:col-span-3">
-                  <label className="text-xs font-medium text-lv-muted">Observações</label>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Opcional…"
-                    rows={3}
-                    className="mt-1 w-full resize-none rounded-2xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100 focus:border-emerald-300"
-                  />
-                </div>
+              <div className="mt-3 space-y-1">
+                <div className="text-xs text-lv-muted">Observações</div>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Opcional..."
+                  className="min-h-[64px] w-full rounded-xl border border-lv-border bg-white/80 px-3 py-2 text-sm outline-none focus:ring-4 focus:ring-emerald-100"
+                />
               </div>
             </div>
 
             {/* histórico */}
-            <div className="rounded-3xl border border-lv-border bg-white/70 p-4 md:p-5">
+            <div className="rounded-2xl border border-lv-border bg-white/70 p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-lv-fg">Histórico</div>
                   <div className="text-xs text-lv-muted">Eventos de estágio deste lote</div>
                 </div>
-                <span className="text-xs text-lv-muted">
-                  {events.length} evento(s)
-                </span>
+                <div className="text-xs text-lv-muted">{events.length} evento(s)</div>
               </div>
 
-              <div className="mt-4 space-y-2">
+              <div className="mt-3 space-y-2">
                 {events.length === 0 ? (
-                  <div className="text-sm text-lv-muted">
-                    Nenhum evento registrado ainda.
-                  </div>
+                  <div className="text-sm text-lv-muted">Nenhum evento ainda.</div>
                 ) : (
                   events.map((ev) => {
-                    const fromName = ev.from_stage_id
-                      ? stageMap[ev.from_stage_id]?.name ?? "—"
-                      : "—";
-                    const toName = stageMap[ev.to_stage_id]?.name ?? "—";
-
+                    const fromName = ev.from_stage_id ? stageNameById.get(ev.from_stage_id) : null;
+                    const toName = stageNameById.get(ev.to_stage_id) ?? "—";
                     return (
                       <div
                         key={ev.id}
-                        className="rounded-2xl border border-lv-border bg-lv-surface/60 px-3 py-2.5"
+                        className="flex items-center justify-between rounded-2xl border border-lv-border bg-white/70 px-4 py-2.5"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm text-lv-fg/90">
-                            <span className="font-medium">{fromName}</span>{" "}
-                            <span className="text-lv-muted">→</span>{" "}
-                            <span className="font-medium">{toName}</span>
-                          </div>
-                          <div className="text-xs text-lv-muted">
-                            {formatDateBR(ev.event_date)}
-                          </div>
+                        <div className="text-sm text-lv-fg">
+                          {fromName ? `${fromName} → ${toName}` : `— → ${toName}`}
                         </div>
-
-                        {ev.notes ? (
-                          <div className="mt-1 text-xs text-lv-muted">
-                            {ev.notes}
-                          </div>
-                        ) : null}
+                        <div className="text-xs text-lv-muted">
+                          {ev.event_date?.split("-").reverse().join("/")}
+                        </div>
                       </div>
                     );
                   })
                 )}
               </div>
             </div>
-          </div>
 
-          {/* footer */}
-          <div className="p-4 md:p-5 border-t border-lv-border bg-white/60 text-[11px] text-lv-muted">
-            Dica: pressione <span className="font-semibold text-lv-fg/80">Esc</span> para fechar.
+            {err ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {err}
+              </div>
+            ) : null}
+
+            <div className="text-xs text-lv-muted">Dica: pressione Esc para fechar.</div>
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

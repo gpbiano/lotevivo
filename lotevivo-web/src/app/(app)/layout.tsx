@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/app-shell/Sidebar";
 import Header from "@/components/app-shell/Header";
 import { getToken } from "@/lib/auth";
+import MixpanelProvider from "@/components/providers/MixpanelProvider";
 
 function AppBackground() {
   return (
@@ -64,15 +65,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen text-lv-fg">
       <AppBackground />
 
+      {/* ✅ Mixpanel roda no client quando app renderiza */}
+      <MixpanelProvider />
+
       <div className="flex min-h-screen">
         <Sidebar />
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col">
           <Header />
 
-          <main className="p-4 md:p-6">
-            <div className="max-w-[1400px] mx-auto">
-              <div className="rounded-3xl border border-lv-border bg-lv-surface/80 backdrop-blur p-4 md:p-6 shadow-soft">
+          <main className="flex-1 min-w-0 p-4 md:p-6 overflow-x-auto overflow-y-auto">
+            <div className="max-w-[1400px] mx-auto min-w-0">
+              <div className="rounded-3xl border border-lv-border bg-lv-surface/80 backdrop-blur p-4 md:p-6 shadow-soft min-w-0 overflow-x-auto">
                 {children}
               </div>
             </div>
